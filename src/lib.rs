@@ -114,8 +114,7 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         b_ref: &'a str,
         b_value: &'a str,
         b_name: &'a str,
-        #[serde(deserialize_with = "csv::invalid_option")]
-        b_qnty: Option<usize>,
+        b_qnty: &'a str,
     }
 
     #[derive(Debug, PartialEq)]
@@ -201,6 +200,22 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                         print_bomvec("", "", None, Some(br2));
                         prd2.extend(br2.b_ref.iter().map(|c| c.as_str()));
                     }
+                }
+            }
+        }
+        if hbs.name1bv_dnphm.len() > 0 {
+            println!("DNP in BOM1:");
+            for ni in &hbs.name1bv_dnphm {
+                for xi in ni.1 {
+                    print_bomvec("", "", Some(xi), None);
+                }
+            }
+        }
+        if hbs.name2bv_dnphm.len() > 0 {
+            println!("DNP in BOM2:");
+            for ni in &hbs.name2bv_dnphm {
+                for xi in ni.1 {
+                    print_bomvec("", "", Some(xi), None);
                 }
             }
         }
@@ -466,109 +481,137 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         name2_hm: HashMap<&'a str, HashSet<&'a str>>,
         name1_bvhm: HashMap<&'a str, Vec<&'a BomVec>>,
         name2_bvhm: HashMap<&'a str, Vec<&'a BomVec>>,
+        name1bv_dnphm: HashMap<&'a str, Vec<&'a BomVec>>,
+        name2bv_dnphm: HashMap<&'a str, Vec<&'a BomVec>>,
     }
     //https://gist.github.com/conundrumer/4e57c14705055bb2deac1b9fde84f83b
     fn boms_to_hash<'a>(bom1: &'a Vec<BomVec>, bom2: &'a Vec<BomVec>) -> (usize, HashBoms<'a>) {
         //    let mut ai: Vec<BomRowsWrt> = Vec::new();
-        let mut bom1hm: HashMap<&str, &BomVec> = HashMap::new();
-        let mut bom2hm: HashMap<&str, &BomVec> = HashMap::new();
+        let mut bom1hm: HashMap<&str, &BomVec> = HashMap::new(); // Ref BomVec
+        let mut bom2hm: HashMap<&str, &BomVec> = HashMap::new(); //
         let mut name1hm: HashMap<&str, HashSet<&str>> = HashMap::new(); // <Name, HS<Ref>>
         let mut name2hm: HashMap<&str, HashSet<&str>> = HashMap::new();
-        let mut name1bvhm: HashMap<&str, Vec<&BomVec>> = HashMap::new();
+        let mut name1bvhm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
         let mut name2bvhm: HashMap<&str, Vec<&BomVec>> = HashMap::new();
+        let mut name1bv_dnp_hm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
+        let mut name2bv_dnp_hm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
 
         let mut ch_error: usize = 0;
         for b_i in bom1.iter() {
             // сохздем хешкарту и проверяем уникальность ref
-            for r_i in b_i.b_ref.iter() {
-                let mut erb = false;
-                if r_i.len() < 1 {
-                    println!("BOM1 error. Empty or short Ref:{} here:", r_i);
-                    print_bomvec("", "", Some(b_i), None);
+            if !b_i.b_value.contains("DNP") {
+                for r_i in b_i.b_ref.iter() {
+                    let mut erb = false;
+                    if r_i.len() < 1 {
+                        println!("BOM1 error. Empty or short Ref:{} here:", r_i);
+                        print_bomvec("", "", Some(b_i), None);
+                    }
+                    bom1hm
+                        .entry(r_i.as_str())
+                        .and_modify(|_| {
+                            //ai.push(copy_bom1_to_emrow(format!("Doublicate Ref:{}", r_i), b_i));
+                            println!("BOM1 error. Doublicate Ref:{} here:", r_i);
+                            print_bomvec("", "", Some(b_i), None);
+                            ch_error += 1;
+                            erb = true;
+                        })
+                        .or_insert(b_i);
+                    if erb {
+                        print_bomvec("", "", Some(bom1hm.get(r_i.as_str()).unwrap()), None);
+                    }
                 }
-                bom1hm
-                    .entry(r_i.as_str())
-                    .and_modify(|_| {
-                        //ai.push(copy_bom1_to_emrow(format!("Doublicate Ref:{}", r_i), b_i));
-                        println!("BOM1 error. Doublicate Ref:{} here:", r_i);
+                name1bvhm
+                    .entry(&b_i.b_name)
+                    .and_modify(|av| {
+                        if name1hm.get(&b_i.b_name.as_str()).is_none() {
+                            av.push(&b_i)
+                        } else {
+                            if !name1hm
+                                .get(&b_i.b_name.as_str())
+                                .unwrap()
+                                .contains(b_i.b_ref.get(0).unwrap_or(&"".to_string()).as_str())
+                            {
+                                av.push(&b_i)
+                            }
+                        };
+                    })
+                    .or_insert_with(|| {
+                        let mut avc = Vec::<&BomVec>::new();
+                        avc.push(&b_i);
+                        avc
+                    });
+                name1hm
+                    .entry(&b_i.b_name)
+                    .or_insert_with(|| HashSet::<&str>::new())
+                    .extend(b_i.b_ref.iter().map(|c| c.as_str()));
+            } else {
+                // DNP
+                name1bv_dnp_hm
+                    .entry(&b_i.b_name)
+                    .and_modify(|av| av.push(&b_i))
+                    .or_insert_with(|| {
+                        let mut avc = Vec::<&BomVec>::new();
+                        avc.push(&b_i);
+                        avc
+                    });
+            }
+        }
+        for b_i in bom2.iter() {
+            if !b_i.b_value.contains("DNP") {
+                for r_i in b_i.b_ref.iter() {
+                    let mut erb = false;
+                    if r_i.len() < 1 {
+                        println!("BOM2 error. Empty or short Ref:{} here:", r_i);
+                        print_bomvec("", "", Some(b_i), None);
+                    }
+                    if bom2hm.contains_key(r_i.as_str()) {
+                        //ai.push(copy_bom2_to_emrow(format!("Doublicate Ref:{}", r_i), b_i));
+                        println!("BOM2 error. Doublicate Ref:{} here:", r_i);
                         print_bomvec("", "", Some(b_i), None);
                         ch_error += 1;
                         erb = true;
+                    } else {
+                        bom2hm.insert(r_i.as_str(), b_i);
+                    }
+                    if erb {
+                        print_bomvec("", "", Some(bom1hm.get(r_i.as_str()).unwrap()), None);
+                    }
+                }
+                name2bvhm
+                    .entry(&b_i.b_name)
+                    .and_modify(|av| {
+                        if name2hm.get(&b_i.b_name.as_str()).is_none() {
+                            av.push(&b_i)
+                        } else {
+                            if !name2hm
+                                .get(&b_i.b_name.as_str())
+                                .unwrap()
+                                .contains(b_i.b_ref.get(0).unwrap_or(&"".to_string()).as_str())
+                            {
+                                av.push(&b_i)
+                            }
+                        };
                     })
-                    .or_insert(b_i);
-                if erb {
-                    print_bomvec("", "", Some(bom1hm.get(r_i.as_str()).unwrap()), None);
-                }
+                    .or_insert_with(|| {
+                        let mut avc = Vec::<&BomVec>::new();
+                        avc.push(&b_i);
+                        avc
+                    });
+                name2hm
+                    .entry(&b_i.b_name)
+                    .or_insert_with(|| HashSet::<&str>::new())
+                    .extend(b_i.b_ref.iter().map(|c| c.as_str()));
+            } else {
+                // DNP
+                name2bv_dnp_hm
+                    .entry(&b_i.b_name)
+                    .and_modify(|av| av.push(&b_i))
+                    .or_insert_with(|| {
+                        let mut avc = Vec::<&BomVec>::new();
+                        avc.push(&b_i);
+                        avc
+                    });
             }
-            name1bvhm
-                .entry(&b_i.b_name)
-                .and_modify(|av| {
-                    if name1hm.get(&b_i.b_name.as_str()).is_none() {
-                        av.push(&b_i)
-                    } else {
-                        if !name1hm
-                            .get(&b_i.b_name.as_str())
-                            .unwrap()
-                            .contains(b_i.b_ref.get(0).unwrap_or(&"".to_string()).as_str())
-                        {
-                            av.push(&b_i)
-                        }
-                    };
-                })
-                .or_insert_with(|| {
-                    let mut avc = Vec::<&BomVec>::new();
-                    avc.push(&b_i);
-                    avc
-                });
-            name1hm
-                .entry(&b_i.b_name)
-                .or_insert_with(|| HashSet::<&str>::new())
-                .extend(b_i.b_ref.iter().map(|c| c.as_str()));
-        }
-        for b_i in bom2.iter() {
-            for r_i in b_i.b_ref.iter() {
-                let mut erb = false;
-                if r_i.len() < 1 {
-                    println!("BOM2 error. Empty or short Ref:{} here:", r_i);
-                    print_bomvec("", "", Some(b_i), None);
-                }
-                if bom2hm.contains_key(r_i.as_str()) {
-                    //ai.push(copy_bom2_to_emrow(format!("Doublicate Ref:{}", r_i), b_i));
-                    println!("BOM2 error. Doublicate Ref:{} here:", r_i);
-                    print_bomvec("", "", Some(b_i), None);
-                    ch_error += 1;
-                    erb = true;
-                } else {
-                    bom2hm.insert(r_i.as_str(), b_i);
-                }
-                if erb {
-                    print_bomvec("", "", Some(bom1hm.get(r_i.as_str()).unwrap()), None);
-                }
-            }
-            name2bvhm
-                .entry(&b_i.b_name)
-                .and_modify(|av| {
-                    if name2hm.get(&b_i.b_name.as_str()).is_none() {
-                        av.push(&b_i)
-                    } else {
-                        if !name2hm
-                            .get(&b_i.b_name.as_str())
-                            .unwrap()
-                            .contains(b_i.b_ref.get(0).unwrap_or(&"".to_string()).as_str())
-                        {
-                            av.push(&b_i)
-                        }
-                    };
-                })
-                .or_insert_with(|| {
-                    let mut avc = Vec::<&BomVec>::new();
-                    avc.push(&b_i);
-                    avc
-                });
-            name2hm
-                .entry(&b_i.b_name)
-                .or_insert_with(|| HashSet::<&str>::new())
-                .extend(b_i.b_ref.iter().map(|c| c.as_str()));
         }
 
         let slh = &bom1hm;
@@ -603,6 +646,8 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
             name2_hm: name2hm,
             name1_bvhm: name1bvhm,
             name2_bvhm: name2bvhm,
+            name1bv_dnphm: name1bv_dnp_hm,
+            name2bv_dnphm: name2bv_dnp_hm,
         };
         (ch_error, hbs)
     }
@@ -762,42 +807,55 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 //if let Some(v) = ires.b_odoo {
                 //    sd = format!("{}", v);
                 //};
-
-                // преобразуем строку b_ref в вектор Vec<BomRef>.
-                // C1, C2, C3, C4, -> {C1, false}, {C2, false}, {C3, false}...
-                let wtr_row2 = ires.b_ref.to_string();
-                if wtr_row2.len() > 1 {
-                    let mut list_ref2: Vec<String> = wtr_row2
-                        .split(',')
-                        .map(|c| c.chars().filter(|c| !c.is_whitespace()).collect())
-                        .collect();
-                    // послений элемент как правило пустой от парсера, его удаляем
-                    if let Some(v) = list_ref2.last() {
-                        if v.eq("") {
-                            list_ref2.pop();
+                if !ires.b_ref.contains("Ref") {
+                    let mut qnty_s = ires.b_qnty;
+                    //println!("{}", qnty_s);
+                    let mut qnty: Option<usize> = None;
+                    if qnty_s.contains(".0") {
+                        if qnty_s.len() > 2 {
+                            qnty_s = &qnty_s[0..qnty_s.len() - 2];
                         }
                     }
+                    let qnty_r = qnty_s.parse::<usize>();
+                    if qnty_r.is_ok() {
+                        qnty = Some(qnty_r.unwrap());
+                    }
+                    // преобразуем строку b_ref в вектор Vec<BomRef>.
+                    // C1, C2, C3, C4, -> {C1, false}, {C2, false}, {C3, false}...
+                    let wtr_row2 = ires.b_ref.to_string();
+                    if wtr_row2.len() > 1 {
+                        let mut list_ref2: Vec<String> = wtr_row2
+                            .split(',')
+                            .map(|c| c.chars().filter(|c| !c.is_whitespace()).collect())
+                            .collect();
+                        // послений элемент как правило пустой от парсера, его удаляем
+                        if let Some(v) = list_ref2.last() {
+                            if v.eq("") {
+                                list_ref2.pop();
+                            }
+                        }
 
-                    // сохраняем строку csv как строку вектора
-                    let a_v = BomVec {
-                        b_odoo: ires.b_odoo,
-                        b_ref: list_ref2, //list_br_ref,
-                        b_value: ires.b_value.to_owned(),
-                        b_name: ires.b_name.to_owned(),
-                        b_qnty: ires.b_qnty,
-                    };
-                    bom_vec1.push(a_v);
-                } else {
-                    println!("Warning! Ref is empty. Line ignored");
-                    println!("In file: {}", file_path);
-                    println!(
-                        "{}\t{}\t{}\t{}\t{}",
-                        ires.b_odoo.unwrap_or(0),
-                        ires.b_ref,
-                        ires.b_value,
-                        ires.b_name,
-                        ires.b_qnty.unwrap_or(0)
-                    );
+                        // сохраняем строку csv как строку вектора
+                        let a_v = BomVec {
+                            b_odoo: ires.b_odoo,
+                            b_ref: list_ref2, //list_br_ref,
+                            b_value: ires.b_value.to_owned(),
+                            b_name: ires.b_name.to_owned(),
+                            b_qnty: qnty,
+                        };
+                        bom_vec1.push(a_v);
+                    } else {
+                        println!("Warning! Ref is empty. Line ignored");
+                        println!("In file: {}", file_path);
+                        println!(
+                            "{}\t{}\t{}\t{}\t{}",
+                            ires.b_odoo.unwrap_or(0),
+                            ires.b_ref,
+                            ires.b_value,
+                            ires.b_name,
+                            qnty.unwrap_or(0)
+                        );
+                    }
                 }
 
                 // печатаем для отладки одоо + ref
