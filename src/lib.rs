@@ -253,13 +253,21 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                     fe2 = true;
                 }
             }
+
             if !fe && !fe2 {
                 if qn1 != qn2 {
                     println!("Error Qnty in BOM1 and BOM2 is not same");
                     println!("BOM1:");
-                    let _ui = n_bv.1.iter().map(|a| print_bomvec("", "", Some(a), None));
+                    println!("{}", n_bv.0);
+                    for a in n_bv.1.iter() {
+                        print_bomvec("", "", Some(a), None);
+                    }
                     println!("BOM2:");
-                    let _ui = am.iter().map(|a| print_bomvec("", "", Some(a), None));
+                    println!("{}", name2);
+                    for a in am.iter() {
+                        print_bomvec("", "", Some(a), None);
+                    }
+                    err += 1;
                 }
             }
         }
@@ -372,23 +380,60 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
     }
 
     fn check_ref_to_name(hbs: &HashBoms) -> usize {
+        //C1, C14, C38,
         let mut err: usize = 0;
         for n_i in &hbs.name1_hm {
             let mut f2ref: String = "".to_string();
             let mut fen = true;
+            let mut bv: Option<&BomVec> = None;
+            //    println!("");
             for r_i in n_i.1 {
+                //    print!("{},", r_i);
                 if fen {
                     fen = false;
                     f2ref.push_str(&hbs.bom2_hm.get(r_i).unwrap().b_name);
+                    bv = hbs.bom2_hm.get(r_i).copied();
                 }
                 //bom2_hm.get(r_i).unwrap().b_name.contains(f2ref) ;
-                if !hbs.bom2_hm.get(r_i).unwrap().b_name.contains(&f2ref) {
+                if !hbs.bom2_hm.get(r_i).unwrap().b_name.contains(&f2ref)
+                    || (hbs.bom2_hm.get(r_i).unwrap().b_name.len() != f2ref.len())
+                {
                     // error not same names Ref in bom1 and bom2
                     println!("Error. Names for Ref:{} is not same", r_i);
                     println!("BOM1:");
                     print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
                     println!("BOM2:");
                     print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
+                    //println!("{}", f2ref);
+                    print_bomvec("", "", bv, None);
+                    err += 1;
+                }
+            }
+        }
+        for n_i in &hbs.name2_hm {
+            let mut f2ref: String = "".to_string();
+            let mut fen = true;
+            let mut bv: Option<&BomVec> = None;
+            //println!("");
+            for r_i in n_i.1 {
+                //    print!("{},", r_i);
+                if fen {
+                    fen = false;
+                    f2ref.push_str(&hbs.bom1_hm.get(r_i).unwrap().b_name);
+                    bv = hbs.bom1_hm.get(r_i).copied();
+                }
+                //bom2_hm.get(r_i).unwrap().b_name.contains(f2ref) ;
+                if !hbs.bom1_hm.get(r_i).unwrap().b_name.contains(&f2ref)
+                    || (hbs.bom1_hm.get(r_i).unwrap().b_name.len() != f2ref.len())
+                {
+                    // error not same names Ref in bom1 and bom2
+                    println!("Error. Names for Ref:{} is not same", r_i);
+                    println!("BOM2:");
+                    print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
+                    println!("BOM1:");
+                    print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
+                    //println!("{}", f2ref);
+                    print_bomvec("", "", bv, None);
                     err += 1;
                 }
             }
@@ -721,26 +766,39 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 // преобразуем строку b_ref в вектор Vec<BomRef>.
                 // C1, C2, C3, C4, -> {C1, false}, {C2, false}, {C3, false}...
                 let wtr_row2 = ires.b_ref.to_string();
-                let mut list_ref2: Vec<String> = wtr_row2
-                    .split(',')
-                    .map(|c| c.chars().filter(|c| !c.is_whitespace()).collect())
-                    .collect();
-                // послений элемент как правило пустой от парсера, его удаляем
-                if let Some(v) = list_ref2.last() {
-                    if v.eq("") {
-                        list_ref2.pop();
+                if wtr_row2.len() > 1 {
+                    let mut list_ref2: Vec<String> = wtr_row2
+                        .split(',')
+                        .map(|c| c.chars().filter(|c| !c.is_whitespace()).collect())
+                        .collect();
+                    // послений элемент как правило пустой от парсера, его удаляем
+                    if let Some(v) = list_ref2.last() {
+                        if v.eq("") {
+                            list_ref2.pop();
+                        }
                     }
-                }
 
-                // сохраняем строку csv как строку вектора
-                let a_v = BomVec {
-                    b_odoo: ires.b_odoo,
-                    b_ref: list_ref2, //list_br_ref,
-                    b_value: ires.b_value.to_owned(),
-                    b_name: ires.b_name.to_owned(),
-                    b_qnty: ires.b_qnty,
-                };
-                bom_vec1.push(a_v);
+                    // сохраняем строку csv как строку вектора
+                    let a_v = BomVec {
+                        b_odoo: ires.b_odoo,
+                        b_ref: list_ref2, //list_br_ref,
+                        b_value: ires.b_value.to_owned(),
+                        b_name: ires.b_name.to_owned(),
+                        b_qnty: ires.b_qnty,
+                    };
+                    bom_vec1.push(a_v);
+                } else {
+                    println!("Warning! Ref is empty. Line ignored");
+                    println!("In file: {}", file_path);
+                    println!(
+                        "{}\t{}\t{}\t{}\t{}",
+                        ires.b_odoo.unwrap_or(0),
+                        ires.b_ref,
+                        ires.b_value,
+                        ires.b_name,
+                        ires.b_qnty.unwrap_or(0)
+                    );
+                }
 
                 // печатаем для отладки одоо + ref
                 /*println!("{}", sd);
