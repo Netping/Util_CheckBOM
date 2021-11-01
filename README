@@ -1,12 +1,13 @@
 checkbom - программа проверки BOM формата Netping сформированных схемотехником и снабженцем
-Odoo Ref Value Name Qnty, где 
+Odoo Ref Value Name Qnty, где
 Odoo - закупочный код
 Ref - уникальное обозначение в схеме и BOM
 Value - номинал компонента
-Name - Имя компонента. В BOM схемотехника и снабжения могут быть разные. 
+Name - Имя компонента. В BOM схемотехника и снабжения могут быть разные.
 Qnty - количество
+если разделитель не запятая, поля не должны быть в кавычках.
 
-как использовать: 
+как использовать:
 ./checkbom -h
 
 checkbom - утилита для проверки BOM2 по BOM1.
@@ -16,10 +17,14 @@ BOM2 - созданные снабжением и выгруженный из od
 формат полей BOM: Odoo,Ref,Value,Name,Qnty
 checkbom tz filebom1.csv filebom2.CSV
 tz - разделитель tab для filebom1.csv и , для filebom2.CSV
-варианты использвоания tt, zt, zz 
+варианты использвоания tt, zt, zz
 
 для выгрузки суммарного БОМ для ручной проверки пример:
  ./checkbom tt BOMq1.csv BOMq3.csv > output.csv
+
+Версия 0.2 добавлено
+игнорирование DNP. Выводятся в финальной таблице отдельным списком.
+выполняется корректно загрузка Qnty формата 0.0
 
 Версия 0.1 проверяет
 1. то что файлы открываются и считываются
@@ -27,9 +32,9 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
 3. то что все Ref из BOM1 есть в BOM2 и наоборот. Нет пропущенных Ref
 4. Ref с одинаковыми Name в BOM1 должны быть также одинаковы в BOM2. Ref не может быть пустым в BOM.
 5. Odoo для одинаковых Name должен быть одинаковым как в BOM1 так и в BOM2
-6. Qnty для одинаковых Name должно соотвествовать количеству Ref как в BOM1так и в BOM2, 
-общее количество в обоих BOM должно быть одинаковым. Qnty должно быть числом. 
-7. Общая таблица выводится только тогла, когда устранены все ошибки  
+6. Qnty для одинаковых Name должно соотвествовать количеству Ref как в BOM1так и в BOM2,
+общее количество в обоих BOM должно быть одинаковым. Qnty должно быть числом.
+7. Общая таблица выводится только тогла, когда устранены все ошибки
 8. Value в версии 0.1 НЕ ПРОВЕРЯЕТСЯ.
 9. Строки не соответствующие формату Netping игнорируются
 10. 
@@ -66,11 +71,10 @@ Check Names complete
 Check Odoo complete
 Check Qnty complete
 Odoo	Ref	Value	Name	Qnty	Odoo2	Ref2	Value2	Name2	Qnty2
-2005	C4, 	470pF	Chip ceramic capacitor 0603 470 pF 10% 50V X7R- GRM188R71H471KA01D [SMD]	1	2005	C4, 	470pF	Chip ceramic capacitor 0603 470 pF 10% 50V X7R- GRM188R71H471KA01D [SMD]	1	
-1813	C63, 	22pF	C_22pF_50V_SMD_0603	1	1813	C63, 	22pF	C_22pF_50V_SMD_0603	1	
--	C57, C58, 	100pF	Chip ceramic capacitor 0603 100 pF 5% 50V C0G (101)- GRM1885C1H101JA01D [SMD]	2	-	C57, C58, 	100pF	Chip ceramic capacitor 0603 100 pF 5% 50V C0G (101)- GRM1885C1H101JA01D [SMD]	2	
-3354	C64, C72, 	100uF	Aluminum capacitors RVZ series 100uF 35V, 8X10mm, RVZ-35V101MGA5U-R2 [SMD]	2	3354	C64, C72, 	100uF	Aluminum capacitors RVZ series 100uF 35V, 8X10mm, RVZ-35V101MGA5U-R2 [SMD]	2	
-1717	C56, 	1uF	C_1uF_25V_SMD_0603	1	1717	C56, 	1uF	C_1uF_25V_SMD_0603	1	
-1866	C75, C76, C79, C77, C78, 	22uF 16V	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	5	1866	C75, C76, C77, C78, 	22uF 16V	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	4	
-					1866	C79, 	470pF	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	1	
-
+2005	C4, 	470pF	Chip ceramic capacitor 0603 470 pF 10% 50V X7R- GRM188R71H471KA01D [SMD]	1	2005	C4, 	470pF	Chip ceramic capacitor 0603 470 pF 10% 50V X7R- GRM188R71H471KA01D [SMD]	1
+1813	C63, 	22pF	C_22pF_50V_SMD_0603	1	1813	C63, 	22pF	C_22pF_50V_SMD_0603	1
+-	C57, C58, 	100pF	Chip ceramic capacitor 0603 100 pF 5% 50V C0G (101)- GRM1885C1H101JA01D [SMD]	2	-	C57, C58, 	100pF	Chip ceramic capacitor 0603 100 pF 5% 50V C0G (101)- GRM1885C1H101JA01D [SMD]	2
+3354	C64, C72, 	100uF	Aluminum capacitors RVZ series 100uF 35V, 8X10mm, RVZ-35V101MGA5U-R2 [SMD]	2	3354	C64, C72, 	100uF	Aluminum capacitors RVZ series 100uF 35V, 8X10mm, RVZ-35V101MGA5U-R2 [SMD]	2
+1717	C56, 	1uF	C_1uF_25V_SMD_0603	1	1717	C56, 	1uF	C_1uF_25V_SMD_0603	1
+1866	C75, C76, C79, C77, C78, 	22uF 16V	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	5	1866	C75, C76, C77, C78, 	22uF 16V	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	4
+					1866	C79, 	470pF	Chip ceramic capacitor 1206 22 uF 10% 16V X7R (226) (Replace 6.3V value) [SMD]	1
