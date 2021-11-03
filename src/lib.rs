@@ -792,15 +792,24 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
 
         let mut bom_vec1: Vec<BomVec> = Vec::new();
 
-        for result in reader.records() {
+        'lbr: for result in reader.records() {
             // выкидывает без ошибки битые строки!
-
             if result.is_ok() {
                 // строка в таблице без ошибок
                 let r_strrec = result.expect("SrtingRecord error"); //Ошибка в строке
-                let ires: BomRows = r_strrec
-                    .deserialize(None)
-                    .expect("Parser deserialize error"); // Ошибка в строке CSV
+                                                                    /*let ir_e: Result<BomRows, csv::Error> = r_strrec.deserialize(None);
+                                                                    if ir_e.is_err() {
+                                                                        break 'lbreak;
+                                                                    }*/
+                let ir: Result<BomRows, csv::Error> = r_strrec.deserialize(None);
+                if ir.is_err() {
+                    break 'lbr;
+                }
+
+                //let ires: BomRows = r_strrec
+                //    .deserialize(None)
+                //    .expect("Parser deserialize error"); // Ошибка в строке CSV
+                let ires: BomRows = ir.expect("Parser deserialize error"); // Ошибка в строке CSV
 
                 //let mut sd = String::from("-");
                 // проверяем наличие одоо кода
