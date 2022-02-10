@@ -7,6 +7,7 @@ mod integration_test {
             bom2: "".to_string(),
             delim1: CsvDelim::Tab,
             delim2: CsvDelim::Zap,
+            modify_bom: 0,
         };
         let bom = bom_file_to_vec(&config.bom1, config.delim1);
         /*

@@ -24,6 +24,7 @@ pub mod mg_mod {
         pub bom2: String,
         pub delim1: CsvDelim,
         pub delim2: CsvDelim,
+        pub modify_bom: usize,
     }
 
     impl Config {
@@ -62,6 +63,7 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 }
                 2 => return Err("Must be 3 arguments. Try h for help."),
                 3 => println!("checkbom starting"),
+                4 => println!("checkbom starting"),
                 _ => return Err("Unknown arguments. Try h for help."),
             }
 
@@ -96,12 +98,18 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 Some(arg) => arg,
                 None => return Err("Didn't get a BOM2 file"),
             };
+            let mut modify_bom: usize = 0;
+            let pa1 = args.next();
+            if pa1.is_some() {
+                modify_bom = pa1.unwrap().parse::<usize>().unwrap_or(0);
+            }
 
             Ok(Config {
                 bom1,
                 bom2,
                 delim1,
                 delim2,
+                modify_bom,
             })
             //Ok(Config { query, filename })
         }
@@ -139,7 +147,7 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         let bom1 = bom_file_to_vec(&config.bom1, config.delim1)?;
         let bom2 = bom_file_to_vec(&config.bom2, config.delim2)?;
 
-        let (aerr, ahash) = boms_to_hash(&bom1, &bom2);
+        let (aerr, ahash) = boms_to_hash(&bom1, &bom2, config.modify_bom);
 
         if aerr != 0 {
             println!("Ref check fail: {} Errors", aerr);
@@ -147,7 +155,8 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         } else {
             println!("Check Refs in both files complete");
         }
-        let aerr = check_ref_to_name(&ahash);
+
+        let aerr = check_ref_to_name(&ahash, config.modify_bom);
         if aerr != 0 {
             println!("Names check fail: {} Errors", aerr);
             return Ok(());
@@ -394,65 +403,175 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         err
     }
 
-    fn check_ref_to_name(hbs: &HashBoms) -> usize {
+    fn check_ref_to_name(hbs: &HashBoms, modify_bom: usize) -> usize {
         //C1, C14, C38,
         let mut err: usize = 0;
+        let mut check_change: HashSet<&str> = HashSet::new();
+        let mut outrec: String = String::new();
         for n_i in &hbs.name1_hm {
             let mut f2ref: String = "".to_string();
-            let mut fen = true;
-            let mut bv: Option<&BomVec> = None;
+            //let mut fen = true;
+            //let mut bv: Option<&BomVec> = None;
             //    println!("");
+
             for r_i in n_i.1 {
-                //    print!("{},", r_i);
-                if fen {
-                    fen = false;
+                //println!("new ref {}", r_i);
+                if f2ref.len() == 0 {
+                    //fen = false;
                     f2ref.push_str(&hbs.bom2_hm.get(r_i).unwrap().b_name);
-                    bv = hbs.bom2_hm.get(r_i).copied();
+                    //println!("new name {}", f2ref);
+                    //bv = hbs.bom2_hm.get(r_i).copied();
                 }
                 //bom2_hm.get(r_i).unwrap().b_name.contains(f2ref) ;
                 if !hbs.bom2_hm.get(r_i).unwrap().b_name.contains(&f2ref)
                     || (hbs.bom2_hm.get(r_i).unwrap().b_name.len() != f2ref.len())
                 {
                     // error not same names Ref in bom1 and bom2
-                    println!("Error. Names for Ref:{} is not same", r_i);
-                    println!("BOM1:");
-                    print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
-                    println!("BOM2:");
-                    print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
-                    //println!("{}", f2ref);
-                    print_bomvec("", "", bv, None);
-                    err += 1;
+                    /*println!(
+                        "Error. Names for Ref:{} is not same, {},  {} ",
+                        r_i,
+                        hbs.bom2_hm.get(r_i).unwrap().b_name,
+                        f2ref
+                    ); */
+                    let namecheck1 = hbs.bom1_hm.get(r_i).copied().unwrap().b_name.clone();
+                    let namecheck2 = hbs.bom2_hm.get(r_i).copied().unwrap().b_name.clone();
+                    if !namecheck1.contains(&namecheck2) {
+                        if modify_bom == 1 {
+                            if !check_change.contains(r_i) {
+                                check_change.insert(r_i);
+                                println!(
+                                    "CHANGE. Name for Ref {} in BOM2 to: {}",
+                                    r_i, &namecheck1
+                                );
+
+                                //let name1: &str = r_i;
+                                let hsref = hbs.name1_hm.get(&namecheck1.as_str()).unwrap();
+                                let mut hsnames2: Vec<&BomVec> = Vec::new();
+                                for i in hsref {
+                                    if hbs.bom2_hm.contains_key(i.clone()) {
+                                        let bv: &BomVec = hbs.bom2_hm.get(i.clone()).unwrap();
+                                        if !hsnames2.contains(&bv) {
+                                            hsnames2.push(bv);
+                                        }
+                                    }
+                                }
+                                if hsnames2.len() > 0 {
+                                    println!("\t Possible BOM2 names:");
+                                    for i in &hsnames2 {
+                                        print_bomvec("", "", Some(i), None);
+                                    }
+                                    let mut odoop: String = String::new();
+                                    if hsnames2[0].b_odoo.is_some() {
+                                        odoop.push_str(&format!("{}", hsnames2[0].b_odoo.unwrap()));
+                                    }
+
+                                    let value = hsnames2[0].b_value.clone();
+                                    let name = hsnames2[0].b_name.clone();
+                                    outrec.push_str(&format!(
+                                        "{}\t{}\t{}\t{}\t1\r\n",
+                                        odoop, r_i, value, name
+                                    ));
+                                } else {
+                                    let mut odoop: String = String::new();
+
+                                    if hbs.bom1_hm.get(r_i).unwrap().b_odoo.is_some() {
+                                        odoop.push_str(&format!(
+                                            "{}",
+                                            hbs.bom1_hm.get(r_i).unwrap().b_odoo.unwrap()
+                                        ));
+                                    }
+
+                                    let value = hbs.bom1_hm.get(r_i).unwrap().b_value.clone();
+                                    let name = hbs.bom1_hm.get(r_i).unwrap().b_name.clone();
+                                    outrec.push_str(&format!(
+                                        "{}\t{}\t{}\t{}\t1\r\n",
+                                        odoop, r_i, value, name
+                                    ));
+                                }
+                            }
+                        } else {
+                            println!("Error. Names for Ref:{} is not same", r_i);
+                            println!("BOM1:");
+                            print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
+                            println!("BOM2:");
+                            print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
+                        }
+                        //println!("{}", f2ref);
+                        //print_bomvec("", "", bv, None);
+                        err += 1;
+                    }
                 }
             }
         }
+        if outrec.len() > 0 {
+            println!("Modify list:");
+            println!("{}", outrec);
+        }
+
         for n_i in &hbs.name2_hm {
             let mut f2ref: String = "".to_string();
             let mut fen = true;
-            let mut bv: Option<&BomVec> = None;
+            //let mut bv: Option<&BomVec> = None;
             //println!("");
             for r_i in n_i.1 {
                 //    print!("{},", r_i);
                 if fen {
                     fen = false;
                     f2ref.push_str(&hbs.bom1_hm.get(r_i).unwrap().b_name);
-                    bv = hbs.bom1_hm.get(r_i).copied();
+                    //bv = hbs.bom1_hm.get(r_i).copied();
                 }
                 //bom2_hm.get(r_i).unwrap().b_name.contains(f2ref) ;
                 if !hbs.bom1_hm.get(r_i).unwrap().b_name.contains(&f2ref)
                     || (hbs.bom1_hm.get(r_i).unwrap().b_name.len() != f2ref.len())
                 {
-                    // error not same names Ref in bom1 and bom2
-                    println!("Error. Names for Ref:{} is not same", r_i);
-                    println!("BOM2:");
-                    print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
-                    println!("BOM1:");
-                    print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
-                    //println!("{}", f2ref);
-                    print_bomvec("", "", bv, None);
-                    err += 1;
+                    let namecheck1 = hbs.bom1_hm.get(r_i).copied().unwrap().b_name.clone();
+                    let namecheck2 = hbs.bom2_hm.get(r_i).copied().unwrap().b_name.clone();
+                    if !namecheck2.contains(&namecheck1) {
+                        // error not same names Ref in bom1 and bom2
+                        if modify_bom == 1 {
+                            if !check_change.contains(r_i) {
+                                check_change.insert(r_i);
+                                println!("CHANGE. Name for Ref {} in BOM2 to: {}", r_i, namecheck1);
+                            }
+                        } else {
+                            println!("Error. Names for Ref:{} is not same", r_i);
+                            println!("BOM2:");
+                            print_bomvec("", "", hbs.bom2_hm.get(r_i).copied(), None);
+                            println!("BOM1:");
+                            print_bomvec("", "", hbs.bom1_hm.get(r_i).copied(), None);
+                        }
+                        //println!("{}", f2ref);
+                        //print_bomvec("", "", bv, None);
+                        err += 1;
+                    }
                 }
             }
         }
+
+        // name которые только один ref нужно проверять внимательно
+        let mut fprnt: bool = false;
+        for i in hbs.name1_hm.clone() {
+            if i.1.len() == 1 {
+                /*println!("{}", i.0);
+                for j in i.1 {
+                    println!("{}", j);
+                } */
+                let refn = i.1.iter().last().unwrap();
+                if hbs.bom2_hm.contains_key(refn) {
+                    if !fprnt {
+                        println!("WARNING: One Ref for Name. Pls. manual check:");
+                        fprnt = true;
+                    }
+                    print_bomvec(
+                        "",
+                        "",
+                        hbs.bom1_hm.get(refn).copied(),
+                        hbs.bom2_hm.get(refn).copied(),
+                    );
+                }
+            }
+        }
+
         err
     }
     /*
@@ -485,7 +604,11 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
         name2bv_dnphm: HashMap<&'a str, Vec<&'a BomVec>>,
     }
     //https://gist.github.com/conundrumer/4e57c14705055bb2deac1b9fde84f83b
-    fn boms_to_hash<'a>(bom1: &'a Vec<BomVec>, bom2: &'a Vec<BomVec>) -> (usize, HashBoms<'a>) {
+    fn boms_to_hash<'a>(
+        bom1: &'a Vec<BomVec>,
+        bom2: &'a Vec<BomVec>,
+        modify_bom: usize,
+    ) -> (usize, HashBoms<'a>) {
         //    let mut ai: Vec<BomRowsWrt> = Vec::new();
         let mut bom1hm: HashMap<&str, &BomVec> = HashMap::new(); // Ref BomVec
         let mut bom2hm: HashMap<&str, &BomVec> = HashMap::new(); //
@@ -556,6 +679,25 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                     });
             }
         }
+        /*
+        let sf = bom1hm.clone();
+        for i in sf {
+            println!(" {}", i.0);
+            //let zf = i.1.clone();
+            print!(" {}", i.1.b_name);
+            println!(" ");
+        }
+
+        let sf = name1hm.clone();
+        for i in sf {
+            println!(" {}", i.0);
+            let zf = i.1.clone();
+            for h in zf {
+                print!(", {}", h);
+            }
+            println!(" ");
+        } */
+
         for b_i in bom2.iter() {
             if !b_i.b_value.contains("DNP") {
                 for r_i in b_i.b_ref.iter() {
@@ -613,7 +755,34 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                     });
             }
         }
-
+        /*
+        let sf = bom2hm.clone();
+        for i in sf {
+            println!(" {}", i.0);
+            //let zf = i.1.clone();
+            print!(" {}", i.1.b_name);
+            println!(" ");
+        }
+        let sf = name2hm.clone();
+        for i in sf {
+            println!(" {}", i.0);
+            let zf = i.1.clone();
+            for h in zf {
+                print!(", {}", h);
+            }
+            println!(" ");
+        } */
+        /*
+        let mut bom1hm: HashMap<&str, &BomVec> = HashMap::new(); // Ref BomVec
+        let mut bom2hm: HashMap<&str, &BomVec> = HashMap::new(); //
+        let mut name1hm: HashMap<&str, HashSet<&str>> = HashMap::new(); // <Name, HS<Ref>>
+        let mut name2hm: HashMap<&str, HashSet<&str>> = HashMap::new();
+        let mut name1bvhm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
+        let mut name2bvhm: HashMap<&str, Vec<&BomVec>> = HashMap::new();
+        let mut name1bv_dnp_hm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
+        let mut name2bv_dnp_hm: HashMap<&str, Vec<&BomVec>> = HashMap::new(); // Name Vec<BomVec>
+        */
+        let mut outrec: String = String::new();
         let slh = &bom1hm;
         for ref_i in slh {
             // проверяем что ref есть в обоих бомах
@@ -623,9 +792,57 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 //    format!("Bom2 do not contains Ref:{}", ref_i.0),
                 //        ref_i.1,
                 //));
-                println!("BOM2 error. Do not contains Ref:{} from:", ref_i.0);
-                print_bomvec("", "", Some(ref_i.1), None);
+                if modify_bom == 1 {
+                    println!("INSERT ref {},  name {}", ref_i.0, ref_i.1.b_name);
+                    let name1: &str = ref_i.1.b_name.as_str();
+                    let hsref = name1hm.get(&name1).unwrap();
+                    let mut hsnames2: Vec<&BomVec> = Vec::new();
+                    for i in hsref {
+                        if bom2hm.contains_key(i.clone()) {
+                            let bv: &BomVec = bom2hm.get(i.clone()).unwrap();
+                            if !hsnames2.contains(&bv) {
+                                hsnames2.push(bv);
+                            }
+                        }
+                    }
+                    if hsnames2.len() > 0 {
+                        println!("\t Possible BOM2 names:");
+                        for i in &hsnames2 {
+                            print_bomvec("", "", Some(i), None);
+                        }
+                        let mut odoop: String = String::new();
+                        if hsnames2[0].b_odoo.is_some() {
+                            odoop.push_str(&format!("{}", hsnames2[0].b_odoo.unwrap()));
+                        }
+
+                        let value = hsnames2[0].b_value.clone();
+                        let name = hsnames2[0].b_name.clone();
+                        outrec.push_str(&format!(
+                            "{}\t{}\t{}\t{}\t1\r\n",
+                            odoop, ref_i.0, value, name
+                        ));
+                    } else {
+                        let mut odoop: String = String::new();
+                        if ref_i.1.b_odoo.is_some() {
+                            odoop.push_str(&format!("{}", ref_i.1.b_odoo.unwrap()));
+                        }
+
+                        let value = ref_i.1.b_value.clone();
+                        let name = ref_i.1.b_name.clone();
+                        outrec.push_str(&format!(
+                            "{}\t{}\t{}\t{}\t1\r\n",
+                            odoop, ref_i.0, value, name
+                        ));
+                    }
+                } else {
+                    println!("BOM2 error. Do not contains Ref:{} from:", ref_i.0);
+                    print_bomvec("", "", Some(ref_i.1), None);
+                }
             }
+        }
+        if outrec.len() > 0 {
+            println!("Modify list:");
+            println!("{}", outrec);
         }
         let slh = &bom2hm;
         for ref_i in slh {
@@ -635,8 +852,12 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                 //format!("Bom1 do not contains Ref:{}", ref_i.0),
                 //ref_i.1,
                 //));
-                println!("BOM1 error. Do not contains Ref:{} from:", ref_i.0);
-                print_bomvec("", "", Some(ref_i.1), None);
+                if modify_bom == 1 {
+                    println!("DELETE ref {}", ref_i.0);
+                } else {
+                    println!("BOM1 error. Do not contains Ref:{} from:", ref_i.0);
+                    print_bomvec("", "", Some(ref_i.1), None);
+                }
             }
         }
         let hbs = HashBoms {
@@ -672,7 +893,7 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
             b_qnty: Some(3),
         };
         bom2.push(ins);
-        let (ae1, as1) = boms_to_hash(&bom1, &bom2);
+        let (ae1, as1) = boms_to_hash(&bom1, &bom2, 0);
         assert_eq!(ae1, 0);
         assert_eq!(as1.bom1_hm["C1"].b_odoo.unwrap(), 1234);
         assert_eq!(as1.bom1_hm["C3"].b_name, "capacitor 0,1uF ceramic SMD_0603");
@@ -844,7 +1065,13 @@ tz - разделитель tab для filebom1.csv и , для filebom2.CSV
                             }
                         }
 
-                        // сохраняем строку csv как строку вектора
+                        // сохраняем строку csv как строку вектора'
+                        /*println!(" {}", ires.b_name);
+                        let list_2 = list_ref2.clone();
+                        for i in list_2 {
+                            println!(" {}", i);
+                        } */
+
                         let a_v = BomVec {
                             b_odoo: ires.b_odoo,
                             b_ref: list_ref2, //list_br_ref,
